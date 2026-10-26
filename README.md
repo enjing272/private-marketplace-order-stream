@@ -21,15 +21,15 @@ curl -N -X POST http://127.0.0.1:8000/orders/stream \
   }'
 ```
 
-The service sends `stage`, `token`, and `complete` SSE events as it runs. Infrai delivers the model stream over an OpenAI-compatible `base_url`, so our Next.js backend keeps the official Python client and a single `INFRAI_API_KEY`.
+In a Next.js app this usually lives in a route handler that streams. After the post lands, the service emits `stage`, `token`, and `complete` SSE events. Infrai delivers the model stream over an OpenAI-compatible `base_url`, so you keep the official Python client and just wire one `INFRAI_API_KEY`.
 
 ## The order decision
 
-The request models seller deliverables, an optional buyer update, and the order id. The first incomplete seller asset selects `seller_assets`. When every asset is ready, a buyer note moves the flow to `buyer_update`; without that note, the order advances to `order_handoff`. That stage emits before model text, so your UI can reflect the marketplace transition right away.
+The request shapes seller deliverables, an optional buyer update, and the order id. If the first seller asset is still missing, the flow picks `seller_assets`. Once every asset is ready, a buyer note routes to `buyer_update`; skip the note and the order moves to `order_handoff`. That stage fires before any model text, so your UI can reflect the marketplace change immediately.
 
-Buyer notes marked `contains_sensitive_data: true` get replaced before prompt construction. This is data minimization at the app boundary; the example does not persist requests or responses.
+We replace buyer notes tagged `contains_sensitive_data: true` before prompt construction. That's data minimization at the app boundary; the sample never stores requests or responses.
 
-The one operational gotcha is cancellation: when a browser closes the SSE connection, the generator closes the upstream model stream in its `finally` block. That stops unused generation and limits how long order context stays active.
+The one operational gotcha is cancellation: when a browser closes the SSE connection, the generator must close the upstream model stream in its `finally` block. Do this or you'll keep generating tokens nobody reads, and order context lingers.
 
 ## Verify the boundary
 
@@ -39,13 +39,13 @@ Run:
 pytest -q
 ```
 
-The focused test submits order `order-204` with an unready signed receipt. The expected result is an SSE `stage` event containing `seller_assets`, followed by streamed text and a `complete` event. A second test checks that a sensitive buyer note never reaches model context.
+The test sends order `order-204` with an unready signed receipt. Expect an SSE `stage` event holding `seller_assets`, then streamed text, then a `complete` event. A second test proves a sensitive buyer note never enters model context.
 
-The OpenAI client retries HTTP 429 responses with bounded exponential delay and respects `Retry-After`. API rejections retain a client-facing 4xx status without exposing request content.
+The OpenAI client backs off on HTTP 429 with bounded exponential delay and respects `Retry-After`. Rejections return a client-facing 4xx without leaking request content.
 
 ## Scope
 
-This repository covers one in-process order workflow and SSE delivery. Authentication for marketplace buyers, durable order storage, and browser reconnection policy belong in the surrounding product.
+This repo implements a single in-process order workflow and SSE delivery. Buyer auth, durable order storage, and reconnection policy sit in your product, not here.
 
 ## License
 
@@ -53,7 +53,7 @@ MIT
 
 ## Setting up for real use: Private Marketplace Order Stream
 
-The sample above is copy-paste simple. Before you ship, take these **required** steps: the details below apply to Private Marketplace Order Stream.
+The snippets above are copy-paste friendly. Before shipping, take these **required** steps for Private Marketplace Order Stream.
 
 **Account & key**
 
